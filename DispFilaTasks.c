@@ -16,11 +16,14 @@
 #include "hardware/adc.h"
 #include "hardware/i2c.h"
 #include "lib/ssd1306.h"
+#include "lib/led_matriz.h"
+#include "pio_matriz.pio.h"
 #include "lib/font.h"
 #include "hardware/pwm.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
+#include "pico/bootrom.h"
 #include <stdio.h>
 
 #define I2C_PORT i2c1
@@ -29,14 +32,21 @@
 #define endereco 0x3C
 #define ADC_JOYSTICK_X 26
 #define ADC_JOYSTICK_Y 27
-#define LED_BLUE 12
+#define LED_RED 13
 #define LED_GREEN  11
+#define BUZZER 10
 #define tam_quad 10
+#define botaoB 6
+
+// Variáveis globais
+ssd1306_t ssd;
+volatile bool modo = true;
+bool cor = true;
 
 typedef struct
 {
-    uint16_t x_pos;
-    uint16_t y_pos;
+    uint16_t x_chuva;
+    uint16_t y_nivel;
 } joystick_data_t;
 
 QueueHandle_t xQueueJoystickData;
@@ -52,64 +62,68 @@ void vJoystickTask(void *params)
     while (true)
     {
         adc_select_input(0); // GPIO 26 = ADC0
-        joydata.y_pos = adc_read();
+        joydata.y_nivel = adc_read();
 
         adc_select_input(1); // GPIO 27 = ADC1
-        joydata.x_pos = adc_read();
+        joydata.x_chuva = adc_read();
 
         xQueueSend(xQueueJoystickData, &joydata, 0); // Envia o valor do joystick para a fila
         vTaskDelay(pdMS_TO_TICKS(100));              // 10 Hz de leitura
     }
 }
 
+
 void vDisplayTask(void *params)
 {
-    i2c_init(I2C_PORT, 400 * 1000);
-    gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
-    gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
-    gpio_pull_up(I2C_SDA);
-    gpio_pull_up(I2C_SCL);
-
-    ssd1306_t ssd;
-    ssd1306_init(&ssd, WIDTH, HEIGHT, false, endereco, I2C_PORT);
-    ssd1306_config(&ssd);
-    ssd1306_send_data(&ssd);
 
     joystick_data_t joydata;
-    bool cor = true;
+    
     while (true)
     {
         if (xQueueReceive(xQueueJoystickData, &joydata, portMAX_DELAY) == pdTRUE)
         {
-            uint8_t x = (joydata.x_pos * (128 - tam_quad)) / 4095;
-            uint8_t y = (joydata.y_pos * (64 - tam_quad)) / 4095;
-            y = (64 - tam_quad) - y;                                 // Inverte o eixo Y
-            ssd1306_fill(&ssd, !cor);                                // Limpa a tela
-            ssd1306_rect(&ssd, y, x, tam_quad, tam_quad, cor, !cor); // Quadrado 5x5
+            uint16_t porcX = joydata.x_chuva * 100 / 4095 ;
+            uint16_t porcY = joydata.y_nivel * 100 / 4095 ;
+            char str_nivel[5];
+            char str_chuva[5];
+
+            sprintf(str_chuva, "%d", porcX);
+            sprintf(str_nivel, "%d", porcY);
+
+            if(joydata.x_chuva >= 3480 || joydata.y_nivel >= 3071){
+                ssd1306_fill(&ssd, !cor);            // Limpa a tela
+                ssd1306_draw_string(&ssd, "ALERTA!", 30, 15);
+                ssd1306_draw_string(&ssd, "NIVEIS ANORMAIS", 5, 25);
+            }
+            else{
+                ssd1306_fill(&ssd, !cor);            // Limpa a tela
+                ssd1306_draw_string(&ssd, "Niveis normais", 15, 20);
+            }
+            ssd1306_draw_string(&ssd, str_chuva, 30, 35);
+            ssd1306_draw_string(&ssd, "%", 50, 35);
             ssd1306_send_data(&ssd);
         }
     }
 }
 
+
 void vLedGreenTask(void *params)
 {
-    gpio_set_function(LED_GREEN, GPIO_FUNC_PWM);   // Configura GPIO como PWM
-    uint slice = pwm_gpio_to_slice_num(LED_GREEN); // Obtém o slice de PWM
-    pwm_set_wrap(slice, 100);                     // Define resolução (0–100)
-    pwm_set_chan_level(slice, PWM_CHAN_B, 0);     // Duty inicial
-    pwm_set_enabled(slice, true);                 // Ativa PWM
-
     joystick_data_t joydata;
     while (true)
     {
         if (xQueueReceive(xQueueJoystickData, &joydata, portMAX_DELAY) == pdTRUE)
         {
-            // Brilho proporcional ao desvio do centro
-            int16_t desvio_centro = (int16_t)joydata.x_pos - 2000;
-            if (desvio_centro < 0)
-                desvio_centro = -desvio_centro;
-            uint16_t pwm_value = (desvio_centro * 100) / 2048;
-            pwm_set_chan_level(slice, PWM_CHAN_B, pwm_value);
+            printf("leitura feita. Valor de X : %d\n", joydata.x_chuva);
+            if(joydata.x_chuva >= 3480){
+                gpio_put(LED_GREEN, true);
+                modo = true;
+            }
+            else{
+                gpio_put(LED_GREEN, false);
+                modo = false;
+
+            }
         }
         vTaskDelay(pdMS_TO_TICKS(50)); // Atualiza a cada 50ms
     }
@@ -117,23 +131,21 @@ void vLedGreenTask(void *params)
 
 void vLedBlueTask(void *params)
 {
-    gpio_set_function(LED_BLUE, GPIO_FUNC_PWM);   // Configura GPIO como PWM
-    uint slice = pwm_gpio_to_slice_num(LED_BLUE); // Obtém o slice de PWM
-    pwm_set_wrap(slice, 100);                     // Define resolução (0–100)
-    pwm_set_chan_level(slice, PWM_CHAN_A, 0);     // Duty inicial
-    pwm_set_enabled(slice, true);                 // Ativa PWM
-
     joystick_data_t joydata;
+
     while (true)
     {
         if (xQueueReceive(xQueueJoystickData, &joydata, portMAX_DELAY) == pdTRUE)
         {
-            // Brilho proporcional ao desvio do centro
-            int16_t desvio_centro = (int16_t)joydata.y_pos - 2048;
-            if (desvio_centro < 0)
-                desvio_centro = -desvio_centro;
-            uint16_t pwm_value = (desvio_centro * 100) / 2048;
-            pwm_set_chan_level(slice, PWM_CHAN_A, pwm_value);
+            printf("leitura feita. Valor de Y : %d\n", joydata.y_nivel);
+            if(joydata.y_nivel >= 3070){
+                gpio_put(LED_RED, true);
+                modo = true;
+            }
+            else{
+                gpio_put(LED_RED, false);
+                modo = false;
+            }
         }
         vTaskDelay(pdMS_TO_TICKS(50)); // Atualiza a cada 50ms
     }
@@ -141,21 +153,44 @@ void vLedBlueTask(void *params)
 
 
 // Modo BOOTSEL com botão B
-#include "pico/bootrom.h"
-#define botaoB 6
 void gpio_irq_handler(uint gpio, uint32_t events)
 {
     reset_usb_boot(0, 0);
 }
 
-int main()
-{
+void setup(){
+    // Inicializa LED's
+    gpio_init(LED_GREEN);
+    gpio_set_dir(LED_GREEN, GPIO_OUT);
+    gpio_put(LED_GREEN, false);
+    
+    gpio_init(LED_RED);
+    gpio_set_dir(LED_RED, GPIO_OUT);
+    gpio_put(LED_RED, false);
+
     // Ativa BOOTSEL via botão
     gpio_init(botaoB);
     gpio_set_dir(botaoB, GPIO_IN);
     gpio_pull_up(botaoB);
     gpio_set_irq_enabled_with_callback(botaoB, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
 
+    // Inicializa o I2C do display
+    i2c_init(I2C_PORT, 400 * 1000);
+    gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
+    gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
+    gpio_pull_up(I2C_SDA);
+    gpio_pull_up(I2C_SCL);
+
+    ssd1306_init(&ssd, WIDTH, HEIGHT, false, endereco, I2C_PORT);
+    ssd1306_config(&ssd);
+    ssd1306_send_data(&ssd);
+
+}
+
+int main()
+{   
+
+    setup();
     stdio_init_all();
 
     // Cria a fila para compartilhamento de valor do joystick
