@@ -79,17 +79,17 @@ void vDisplayTask(void *params)
 
             if(joydata.x_chuva >= 3480 || joydata.y_nivel >= 3071){
                 ssd1306_fill(&ssd, !cor);            // Limpa a tela
-                ssd1306_draw_string(&ssd, "ALERTA!", 30, 5);
-                ssd1306_draw_string(&ssd, "NIVEIS ANORMAIS", 5, 15);
+                ssd1306_draw_string(&ssd, "ALERTA!", centralizar_texto("ALERTA!"), 5);
+                ssd1306_draw_string(&ssd, "NIVEIS ANORMAIS", centralizar_texto("NIVEIS ANORMAIS"), 15);
             }
             else{
                 ssd1306_fill(&ssd, !cor);            // Limpa a tela
-                ssd1306_draw_string(&ssd, "Niveis normais", 13, 15);
+                ssd1306_draw_string(&ssd, "Niveis normais", centralizar_texto("Niveis Normais"), 15);
             }
-            ssd1306_draw_string(&ssd, "N. chuva:", 10, 35);
+            ssd1306_draw_string(&ssd, "V. chuva:", 10, 35);
             ssd1306_draw_string(&ssd, str_chuva, 90, 35);
             ssd1306_draw_string(&ssd, "%", 110, 35);
-            ssd1306_draw_string(&ssd, "V. agua:", 10, 45);
+            ssd1306_draw_string(&ssd, "N. agua:", 10, 45);
             ssd1306_draw_string(&ssd, str_nivel, 90, 45);
             ssd1306_draw_string(&ssd, "%", 110, 45);
             ssd1306_send_data(&ssd);
