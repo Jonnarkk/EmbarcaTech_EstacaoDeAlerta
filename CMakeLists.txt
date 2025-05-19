@@ -34,7 +34,6 @@ add_executable(${PROJECT_NAME}
         DispFilaTasks.c 
         lib/ssd1306.c # Biblioteca para o display OLED
         lib/led_matriz.c # Biblioteca para a matriz de LED's
-        lib/sirene.c # Biblioteca para o acionamento do buzzer
         lib/buzzer.c # Biblioteca para o acionnamento do buzzer
         )
 

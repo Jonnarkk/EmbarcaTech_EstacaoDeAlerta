@@ -1,16 +1,3 @@
-/*
- *  Por: Wilton Lacerda Silva
- *  Data: 10/05/2025
- *
- *  Exemplo do uso de Filas queue no FreeRTOS com Raspberry Pi Pico
- *
- *  Descrição: Leitura do valor do joystick e exibição no display OLED SSD1306
- *  com comunicação I2C. O valor do joystick é lido a cada 100ms e enviado para a fila.
- *  A task de exibição recebe os dados da fila e atualiza o display a cada 100ms.
- *  Os leds são controlados por PWM, com brilho proporcional ao desvio do joystick.
- *  O led verde controla o eixo X e o led azul controla o eixo Y.
- */
-
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
 #include "hardware/adc.h"
