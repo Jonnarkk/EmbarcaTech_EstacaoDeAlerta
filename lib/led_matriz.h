@@ -19,6 +19,7 @@ void set_pixel_color(int led_index, double r, double g, double b);
 
 // Novas funções para desenhar símbolos
 void limpar_todos_leds();         // Limpa todos os LED's
-void liga_leds();                 // Liga os LED's
+void exclamacao();                 // Liga os LED's em forma de exclamação
+void checkmark();                 // Liga os LED's em forma de V para dar OK
 
 #endif // LED_MATRIZ_H

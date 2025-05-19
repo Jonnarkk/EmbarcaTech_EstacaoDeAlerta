@@ -11,22 +11,42 @@ void limpar_todos_leds() {
     }
 }
 
-// Função para desenhar uma seta para a direita (verde)
-void liga_leds() {
+// Função para desenhar uma exclamação
+void exclamacao() {
     limpar_todos_leds();
     
-    // Padrão da seta (5x5) - verde
-    int seta[] = {
-        1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1
+    // Padrão da exclamação (5x5) - vermelho
+    int exclama[] = {
+        0, 0, 1, 0, 0,
+        0, 0, 1, 0, 0,
+        0, 0, 1, 0, 0,
+        0, 0, 0, 0, 0,
+        0, 0, 1, 0, 0
     };
 
     for (int i = 0; i < NUM_PIXELS; i++) {
-        if (seta[i]) {
-            set_pixel_color(i, 0.1, 0.1, 0.1); // Verde (R=0, G=0, B=0)
+        if (exclama[i]) {
+            set_pixel_color(i, 0.1, 0.0, 0.0); // Verde (R=0, G=0, B=0)
+        }
+    }
+}
+
+// Função para desenhar um V de OK
+void checkmark() {
+    limpar_todos_leds();
+    
+    // Padrão do V (5x5) - verde
+    int checkmark[] = {
+        0, 0, 0, 0, 0,
+        1, 0, 0, 0, 0,
+        0, 0, 0, 1, 0,
+        0, 0, 1, 0, 1,
+        0, 1, 0, 0, 0
+    };
+
+    for (int i = 0; i < NUM_PIXELS; i++) {
+        if (checkmark[i]) {
+            set_pixel_color(i, 0.0, 0.1, 0.0); // Verde (R=0, G=0, B=0)
         }
     }
 }

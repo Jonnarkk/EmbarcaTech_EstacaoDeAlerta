@@ -16,6 +16,7 @@
 #include "hardware/adc.h"
 #include "hardware/i2c.h"
 #include "lib/ssd1306.h"
+#include "lib/buzzer.h"
 #include "lib/led_matriz.h"
 #include "pio_matriz.pio.h"
 #include "lib/font.h"
@@ -40,7 +41,6 @@
 
 // Variáveis globais
 ssd1306_t ssd;
-volatile bool modo = true;
 bool cor = true;
 
 typedef struct
@@ -92,22 +92,26 @@ void vDisplayTask(void *params)
 
             if(joydata.x_chuva >= 3480 || joydata.y_nivel >= 3071){
                 ssd1306_fill(&ssd, !cor);            // Limpa a tela
-                ssd1306_draw_string(&ssd, "ALERTA!", 30, 15);
-                ssd1306_draw_string(&ssd, "NIVEIS ANORMAIS", 5, 25);
+                ssd1306_draw_string(&ssd, "ALERTA!", 30, 5);
+                ssd1306_draw_string(&ssd, "NIVEIS ANORMAIS", 5, 15);
             }
             else{
                 ssd1306_fill(&ssd, !cor);            // Limpa a tela
-                ssd1306_draw_string(&ssd, "Niveis normais", 15, 20);
+                ssd1306_draw_string(&ssd, "Niveis normais", 13, 15);
             }
-            ssd1306_draw_string(&ssd, str_chuva, 30, 35);
-            ssd1306_draw_string(&ssd, "%", 50, 35);
+            ssd1306_draw_string(&ssd, "N. chuva:", 10, 35);
+            ssd1306_draw_string(&ssd, str_chuva, 90, 35);
+            ssd1306_draw_string(&ssd, "%", 110, 35);
+            ssd1306_draw_string(&ssd, "V. agua:", 10, 45);
+            ssd1306_draw_string(&ssd, str_nivel, 90, 45);
+            ssd1306_draw_string(&ssd, "%", 110, 45);
             ssd1306_send_data(&ssd);
         }
     }
 }
 
 
-void vLedGreenTask(void *params)
+void vLedTask(void *params)
 {
     joystick_data_t joydata;
     while (true)
@@ -115,13 +119,14 @@ void vLedGreenTask(void *params)
         if (xQueueReceive(xQueueJoystickData, &joydata, portMAX_DELAY) == pdTRUE)
         {
             printf("leitura feita. Valor de X : %d\n", joydata.x_chuva);
-            if(joydata.x_chuva >= 3480){
-                gpio_put(LED_GREEN, true);
-                modo = true;
+            printf("leitura feita. Valor de Y : %d\n", joydata.y_nivel);
+            if(joydata.x_chuva >= 3480 || joydata.y_nivel >= 3070){
+                gpio_put(LED_GREEN, false);
+                gpio_put(LED_RED, true);
             }
             else{
-                gpio_put(LED_GREEN, false);
-                modo = false;
+                gpio_put(LED_GREEN, true);
+                gpio_put(LED_RED, false);
 
             }
         }
@@ -129,32 +134,57 @@ void vLedGreenTask(void *params)
     }
 }
 
-void vLedBlueTask(void *params)
-{
+
+void vMatrizTask(void *params){
+    joystick_data_t joydata;
+    PIO pio = pio0;
+    uint sm = 0;
+    uint offset = pio_add_program(pio, &pio_matriz_program);
+    pio_matriz_program_init(pio, sm, offset, pino_matriz);
+
+    while(true){
+        if(xQueueReceive(xQueueJoystickData, &joydata, portMAX_DELAY) == pdTRUE){
+            if(joydata.x_chuva >= 3480 || joydata.y_nivel >= 3071){
+                exclamacao();
+                desenho_pio(0, pio, sm);
+            }
+            else{
+                checkmark();
+                desenho_pio(0, pio, sm);
+            }
+        }
+    }
+}
+
+void vBuzzerTask(void *params){
     joystick_data_t joydata;
 
     while (true)
     {
-        if (xQueueReceive(xQueueJoystickData, &joydata, portMAX_DELAY) == pdTRUE)
-        {
-            printf("leitura feita. Valor de Y : %d\n", joydata.y_nivel);
-            if(joydata.y_nivel >= 3070){
-                gpio_put(LED_RED, true);
-                modo = true;
-            }
-            else{
-                gpio_put(LED_RED, false);
-                modo = false;
+        if (xQueueReceive(xQueueJoystickData, &joydata, portMAX_DELAY) == pdTRUE){
+            if(joydata.x_chuva >= 3480 || joydata.y_nivel >= 3070){
+                buzz(BUZZER, 600, 500);
+                    for(int i = 0; i < 10; i++)
+                        vTaskDelay(pdMS_TO_TICKS(10));
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(50)); // Atualiza a cada 50ms
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
-
-
-// Modo BOOTSEL com botão B
+// Modo BOOTSEL com botão B - Limpa Display & Matriz
 void gpio_irq_handler(uint gpio, uint32_t events)
-{
+{   
+    PIO pio = pio0;
+    uint sm = 0;
+    uint offset = pio_add_program(pio, &pio_matriz_program);
+    pio_matriz_program_init(pio, sm, offset, pino_matriz);
+
+    ssd1306_fill(&ssd, !cor);
+    ssd1306_send_data(&ssd);
+
+    limpar_todos_leds();
+    desenho_pio(0, pio, sm);
+
     reset_usb_boot(0, 0);
 }
 
@@ -173,6 +203,11 @@ void setup(){
     gpio_set_dir(botaoB, GPIO_IN);
     gpio_pull_up(botaoB);
     gpio_set_irq_enabled_with_callback(botaoB, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
+
+    // Inicializa o buzzer
+    gpio_init(BUZZER);
+    gpio_set_dir(BUZZER,GPIO_OUT);
+    
 
     // Inicializa o I2C do display
     i2c_init(I2C_PORT, 400 * 1000);
@@ -199,8 +234,9 @@ int main()
     // Criação das tasks
     xTaskCreate(vJoystickTask, "Joystick Task", 256, NULL, 1, NULL);
     xTaskCreate(vDisplayTask, "Display Task", 512, NULL, 1, NULL);
-    xTaskCreate(vLedGreenTask, "LED red Task", 256, NULL, 1, NULL);
-    xTaskCreate(vLedBlueTask, "LED blue Task", 256, NULL, 1, NULL);
+    xTaskCreate(vLedTask, "LED red Task", 256, NULL, 1, NULL);
+    xTaskCreate(vMatrizTask, "Matriz Task", 256, NULL, 1, NULL);
+    xTaskCreate(vBuzzerTask, "Buzzer Task", 256, NULL, 1, NULL);
     // Inicia o agendador
     vTaskStartScheduler();
     panic_unsupported();
