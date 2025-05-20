@@ -226,7 +226,7 @@ int main()
     stdio_init_all();
 
     // Cria a fila para compartilhamento de valor do joystick
-    xQueueJoystickData = xQueueCreate(5, sizeof(joystick_data_t));
+    xQueueJoystickData = xQueueCreate(30, sizeof(joystick_data_t));
 
     // Criação das tasks
     xTaskCreate(vJoystickTask, "Joystick Task", 256, NULL, 1, NULL);
