@@ -14,6 +14,7 @@
 #include "pico/bootrom.h"
 #include <stdio.h>
 
+// Defines dos periféricos
 #define I2C_PORT i2c1
 #define I2C_SDA 14
 #define I2C_SCL 15
@@ -23,30 +24,30 @@
 #define LED_RED 13
 #define LED_GREEN  11
 #define BUZZER 10
-#define tam_quad 10
 #define botaoB 6
 
 // Variáveis globais
-ssd1306_t ssd;
-bool cor = true;
+ssd1306_t ssd;                  // Variável referente ao display
+bool cor = true;                // Variável booleana para habilitar a impressão no display
 
-typedef struct
+typedef struct // Declaração de tipo para coleta dos dados do joystick
 {
     uint16_t x_chuva;
     uint16_t y_nivel;
 } joystick_data_t;
 
-QueueHandle_t xQueueJoystickData;
+QueueHandle_t xQueueJoystickData;   // Criação da fila do FreeRTOS
 
+// Função da tarefa para leitura do joystick
 void vJoystickTask(void *params)
 {
     adc_gpio_init(ADC_JOYSTICK_Y);
     adc_gpio_init(ADC_JOYSTICK_X);
     adc_init();
 
-    joystick_data_t joydata;
+    joystick_data_t joydata;  
 
-    while (true)
+    while (true) // Loop para leitura dos valores do ADC
     {
         adc_select_input(0); // GPIO 26 = ADC0
         joydata.y_nivel = adc_read();
@@ -59,7 +60,7 @@ void vJoystickTask(void *params)
     }
 }
 
-
+// Função da tarefa do display - Funções da matriz estão no arquivo ssd1306.c
 void vDisplayTask(void *params)
 {
 
@@ -67,47 +68,48 @@ void vDisplayTask(void *params)
     
     while (true)
     {
-        if (xQueueReceive(xQueueJoystickData, &joydata, portMAX_DELAY) == pdTRUE)
+        if (xQueueReceive(xQueueJoystickData, &joydata, portMAX_DELAY) == pdTRUE) // Verificação de presença de dados na fila
         {
-            uint16_t porcX = joydata.x_chuva * 100 / 4095 ;
-            uint16_t porcY = joydata.y_nivel * 100 / 4095 ;
+            uint16_t porcX = joydata.x_chuva * 100 / 4095 ;     // Variável para impressão da porcentagem do volume de chuva no display
+            uint16_t porcY = joydata.y_nivel * 100 / 4095 ;     // Variável para impressão da porcentagem do nível de água
             char str_nivel[5];
             char str_chuva[5];
-
+            
+            // Transformação das porcentagens em string
             sprintf(str_chuva, "%d", porcX);
             sprintf(str_nivel, "%d", porcY);
-
-            if(joydata.x_chuva >= 3480 || joydata.y_nivel >= 3071){
-                ssd1306_fill(&ssd, !cor);            // Limpa a tela
-                ssd1306_draw_string(&ssd, "ALERTA!", centralizar_texto("ALERTA!"), 5);
-                ssd1306_draw_string(&ssd, "NIVEIS ANORMAIS", centralizar_texto("NIVEIS ANORMAIS"), 15);
+            
+            if(joydata.x_chuva >= 3480 || joydata.y_nivel >= 3071){             // Verificação do limiar estipulado para níveis críticos
+                ssd1306_fill(&ssd, !cor);                                       // Limpa a tela
+                ssd1306_draw_string(&ssd, "ALERTA!", centralizar_texto("ALERTA!"), 5);                       // Mostra texto no display                          
+                ssd1306_draw_string(&ssd, "NIVEIS ANORMAIS", centralizar_texto("NIVEIS ANORMAIS"), 15);      // Mostra texto no display  
             }
             else{
-                ssd1306_fill(&ssd, !cor);            // Limpa a tela
-                ssd1306_draw_string(&ssd, "Niveis normais", centralizar_texto("Niveis Normais"), 15);
+                ssd1306_fill(&ssd, !cor);                   // Limpa a tela
+                ssd1306_draw_string(&ssd, "Niveis normais", centralizar_texto("Niveis Normais"), 15); // Mostra texto no display
             }
-            ssd1306_draw_string(&ssd, "V. chuva:", 10, 35);
-            ssd1306_draw_string(&ssd, str_chuva, 90, 35);
-            ssd1306_draw_string(&ssd, "%", 110, 35);
-            ssd1306_draw_string(&ssd, "N. agua:", 10, 45);
-            ssd1306_draw_string(&ssd, str_nivel, 90, 45);
-            ssd1306_draw_string(&ssd, "%", 110, 45);
-            ssd1306_send_data(&ssd);
+            ssd1306_draw_string(&ssd, "V. chuva:", 10, 35);         // Mostra texto Volume de chuva no display
+            ssd1306_draw_string(&ssd, str_chuva, 90, 35);           // Mostra porcentagem númerica 
+            ssd1306_draw_string(&ssd, "%", 110, 35);                // Mostra símbolo de porcentagem
+            ssd1306_draw_string(&ssd, "N. agua:", 10, 45);          // Mostra texto Nível de água no display
+            ssd1306_draw_string(&ssd, str_nivel, 90, 45);           // Mostra porcentagem númerica 
+            ssd1306_draw_string(&ssd, "%", 110, 45);                // Mostra símbolo de porcentagem
+            ssd1306_send_data(&ssd);                                // Envia dados para o display
         }
     }
 }
 
-
+// Função da tarefa do LED RGB
 void vLedTask(void *params)
 {
     joystick_data_t joydata;
     while (true)
     {
-        if (xQueueReceive(xQueueJoystickData, &joydata, portMAX_DELAY) == pdTRUE)
+        if (xQueueReceive(xQueueJoystickData, &joydata, portMAX_DELAY) == pdTRUE)   // Verificação de presença de dados na fila
         {
-            printf("leitura feita. Valor de X : %d\n", joydata.x_chuva);
-            printf("leitura feita. Valor de Y : %d\n", joydata.y_nivel);
-            if(joydata.x_chuva >= 3480 || joydata.y_nivel >= 3070){
+            printf("leitura feita. Valor de X : %d\n", joydata.x_chuva);            // Imprime mensagem na comunicação serial para debug
+            printf("leitura feita. Valor de Y : %d\n", joydata.y_nivel);            // Imprime mensagem na comunicação serial para debug
+            if(joydata.x_chuva >= 3480 || joydata.y_nivel >= 3070){                 // Verificação do limiar estipulado para níveis críticos
                 gpio_put(LED_GREEN, false);
                 gpio_put(LED_RED, true);
             }
@@ -121,8 +123,9 @@ void vLedTask(void *params)
     }
 }
 
-
+// Função da tarefa da matriz de LED's - Funções estão no arquivo led_matriz.c
 void vMatrizTask(void *params){
+    // Declaração de variáveis utilizadas na matriz de LED's
     joystick_data_t joydata;
     PIO pio = pio0;
     uint sm = 0;
@@ -130,34 +133,37 @@ void vMatrizTask(void *params){
     pio_matriz_program_init(pio, sm, offset, pino_matriz);
 
     while(true){
-        if(xQueueReceive(xQueueJoystickData, &joydata, portMAX_DELAY) == pdTRUE){
-            if(joydata.x_chuva >= 3480 || joydata.y_nivel >= 3071){
-                exclamacao();
-                desenho_pio(0, pio, sm);
+        if(xQueueReceive(xQueueJoystickData, &joydata, portMAX_DELAY) == pdTRUE){   // Verificação de presença de dados na fila
+            if(joydata.x_chuva >= 3480 || joydata.y_nivel >= 3071){                 // Verificação do limiar estipulado para níveis críticos
+                exclamacao();                   // Desenha exclamação na matriz de LED's
+                desenho_pio(0, pio, sm);        // Envia os dados para a matriz
             }
             else{
-                checkmark();
-                desenho_pio(0, pio, sm);
+                checkmark();                    // Desenha um checkmark na matriz de LED's
+                desenho_pio(0, pio, sm);        // Envia os dados para a matriz
             }
         }
+        vTaskDelay(pdMS_TO_TICKS(50));          // Atualiza a cada 50ms
     }
 }
 
+// Função da tarefa do buzzer
 void vBuzzerTask(void *params){
     joystick_data_t joydata;
 
     while (true)
     {
-        if (xQueueReceive(xQueueJoystickData, &joydata, portMAX_DELAY) == pdTRUE){
-            if(joydata.x_chuva >= 3480 || joydata.y_nivel >= 3070){
-                buzz(BUZZER, 600, 500);
-                    for(int i = 0; i < 10; i++)
+        if (xQueueReceive(xQueueJoystickData, &joydata, portMAX_DELAY) == pdTRUE){  // Verificação de presença de dados na fila
+            if(joydata.x_chuva >= 3480 || joydata.y_nivel >= 3070){                 // Verificação do limiar estipulado para níveis críticos
+                buzz(BUZZER, 600, 500);                                             // Função para acionar o buzzer - chama função no arquivo buzzer.c
+                    for(int i = 0; i < 10; i++)                                     // For loop para delay de 100 ms quebrado em pequenas intervalos
                         vTaskDelay(pdMS_TO_TICKS(10));
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(50));          // Atualiza a cada 50ms
     }
 }
+
 // Modo BOOTSEL com botão B - Limpa Display & Matriz
 void gpio_irq_handler(uint gpio, uint32_t events)
 {   
@@ -166,15 +172,19 @@ void gpio_irq_handler(uint gpio, uint32_t events)
     uint offset = pio_add_program(pio, &pio_matriz_program);
     pio_matriz_program_init(pio, sm, offset, pino_matriz);
 
+    // Limpa Display
     ssd1306_fill(&ssd, !cor);
     ssd1306_send_data(&ssd);
 
+    // Limpa matriz de LED's
     limpar_todos_leds();
     desenho_pio(0, pio, sm);
 
+    // Põe em modo bootsel
     reset_usb_boot(0, 0);
 }
 
+// Função para inicialização dos periféricos
 void setup(){
     // Inicializa LED's
     gpio_init(LED_GREEN);
@@ -212,7 +222,7 @@ void setup(){
 int main()
 {   
 
-    setup();
+    setup();            // Chama função para setup inicial dos periféricos
     stdio_init_all();
 
     // Cria a fila para compartilhamento de valor do joystick
